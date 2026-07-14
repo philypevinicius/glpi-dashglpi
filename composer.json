@@ -1,0 +1,17 @@
+{
+    "name": "dashglpi/dashglpi",
+    "description": "Dashboard avançado para GLPI",
+    "type": "glpi-plugin",
+    "license": "GPL-3.0-or-later",
+    "authors": [
+        {
+            "name": "Diogo Berlanda"
+        }
+    ],
+    "require": {
+        "php": ">=8.2"
+    },
+    "extra": {
+        "plugin-class": "PluginDashglpi"
+    }
+}
