@@ -1,66 +1,45 @@
 <?php
 
-/**
- * Plugin DashGLPI - Dashboard avançado para GLPI
- *
- * @author  Diogo Berlanda
- * @license GPLv3+
- */
+define('PLUGIN_GLPIPULSETHEME_VERSION', '1.0.0');
+define('PLUGIN_GLPIPULSETHEME_MIN_GLPI_VERSION', '11.0.0');
+define('PLUGIN_GLPIPULSETHEME_MAX_GLPI_VERSION', '11.0.99');
 
-define('PLUGIN_DASHGLPI_VERSION', '1.0.0');
-define('PLUGIN_DASHGLPI_MIN_GLPI_VERSION', '11.0.0');
-define('PLUGIN_DASHGLPI_MAX_GLPI_VERSION', '11.0.99');
-
-/**
- * Retorna informações da versão do plugin
- */
-function plugin_version_dashglpi()
+function plugin_version_glpipulsetheme()
 {
     return [
-        'name'         => 'Dashboard GLPI Pro',
-        'version'      => PLUGIN_DASHGLPI_VERSION,
-        'author'       => 'Diogo Berlanda',
-        'license'      => 'GPLv3+',
-        'homepage'     => 'https://github.com/diberlanda95/dashglpi',
+        'name'         => 'GLPI Pulse Theme',
+        'version'      => PLUGIN_GLPIPULSETHEME_VERSION,
+        'author'       => 'Philype',
+        'license'      => 'GPLv2+',
+        'homepage'     => '',
         'requirements' => [
             'glpi' => [
-                'min' => PLUGIN_DASHGLPI_MIN_GLPI_VERSION,
-                'max' => PLUGIN_DASHGLPI_MAX_GLPI_VERSION,
+                'min' => PLUGIN_GLPIPULSETHEME_MIN_GLPI_VERSION,
+                'max' => PLUGIN_GLPIPULSETHEME_MAX_GLPI_VERSION,
             ],
         ],
     ];
 }
 
-/**
- * Inicialização do plugin — registra hooks, menu, CSS e JS
- */
-function plugin_init_dashglpi()
+function plugin_init_glpipulsetheme()
 {
     global $PLUGIN_HOOKS;
 
-    $PLUGIN_HOOKS['csrf_compliant']['dashglpi'] = true;
+    $PLUGIN_HOOKS['csrf_compliant']['glpipulsetheme'] = true;
 
-    if (Session::getLoginUserID()) {
-        // Menu
-        $PLUGIN_HOOKS['redefine_menus']['dashglpi'] = 'plugin_dashglpi_redefine_menus';
+    $PLUGIN_HOOKS['add_css']['glpipulsetheme'] =
+        'public/css/pulse-theme.css';
 
-        // JS mínimo: força o link do menu a abrir em nova aba
-        $PLUGIN_HOOKS['add_javascript']['dashglpi'] = 'js/menu.js';
-    }
+    $PLUGIN_HOOKS['add_javascript']['glpipulsetheme'] =
+        'public/js/pulse-theme.js';
 }
 
-/**
- * Verifica pré-requisitos do plugin
- */
-function plugin_dashglpi_check_prerequisites()
+function plugin_glpipulsetheme_check_prerequisites()
 {
     return true;
 }
 
-/**
- * Verifica configuração do plugin
- */
-function plugin_dashglpi_check_config()
+function plugin_glpipulsetheme_check_config()
 {
     return true;
 }
