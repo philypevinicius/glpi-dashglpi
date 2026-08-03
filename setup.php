@@ -4,7 +4,7 @@ define('PLUGIN_GLPIPULSETHEME_VERSION', '1.0.0');
 define('PLUGIN_GLPIPULSETHEME_MIN_GLPI_VERSION', '11.0.0');
 define('PLUGIN_GLPIPULSETHEME_MAX_GLPI_VERSION', '11.0.99');
 
-function plugin_version_glpipulsetheme()
+function plugin_version_dashglpi()
 {
     return [
         'name'         => 'GLPI Pulse Theme',
@@ -21,25 +21,25 @@ function plugin_version_glpipulsetheme()
     ];
 }
 
-function plugin_init_glpipulsetheme()
+function plugin_init_dashglpi()
 {
     global $PLUGIN_HOOKS;
 
-    $PLUGIN_HOOKS['csrf_compliant']['glpipulsetheme'] = true;
+    $PLUGIN_HOOKS['csrf_compliant']['dashglpi'] = true;
 
-    $PLUGIN_HOOKS['add_css']['glpipulsetheme'] =
+    $PLUGIN_HOOKS['add_css']['dashglpi'] =
         'public/css/pulse-theme.css';
 
-    $PLUGIN_HOOKS['add_javascript']['glpipulsetheme'] =
+    $PLUGIN_HOOKS['add_javascript']['dashglpi'] =
         'public/js/pulse-theme.js';
 }
 
-function plugin_glpipulsetheme_check_prerequisites()
+function plugin_dashglpi_check_prerequisites()
 {
     return true;
 }
 
-function plugin_glpipulsetheme_check_config()
+function plugin_dashglpi_check_config()
 {
     return true;
 }
