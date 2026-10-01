@@ -1771,3 +1771,126 @@ body.menu-closed .floating-menu-btn {
     color: rgba(255, 255, 255, 0.4);
     text-align: right;
 }
+
+/* ==================== FILTRO DE EQUIPE/TÉCNICOS ==================== */
+
+.team-filter-bar {
+    margin-bottom: 20px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.team-filter-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.team-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+    background: transparent;
+    color: var(--text-sec);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.team-filter-btn:hover {
+    border-color: var(--primary);
+    color: var(--text-main);
+}
+
+.team-filter-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
+
+.team-filter-panel {
+    border-top: 1px solid var(--border-color);
+    padding-top: 12px;
+}
+
+.team-filter-panel[hidden] {
+    display: none;
+}
+
+.team-filter-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    color: var(--text-main);
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.team-filter-panel-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.team-filter-panel-close:hover {
+    color: var(--danger);
+}
+
+.team-filter-checkboxes {
+    max-height: 220px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 6px 12px;
+}
+
+.team-filter-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-sec);
+    font-size: 0.85rem;
+}
+
+.team-filter-checkbox-item:hover {
+    background: var(--glass-bg);
+    color: var(--text-main);
+}
+
+.team-filter-checkbox-item input[type="checkbox"] {
+    accent-color: var(--primary);
+    width: 16px;
+    height: 16px;
+}
+
+.team-filter-panel-footer {
+    margin-top: 10px;
+    text-align: right;
+}
+
+.team-filter-apply {
+    padding: 8px 20px;
+    border-radius: 10px;
+    border: none;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.team-filter-apply:hover {
+    opacity: 0.9;
+}

@@ -12,6 +12,12 @@ require_once __DIR__ . '/../../../inc/includes.php';
 // Exige usuário logado
 Session::checkLoginUser();
 
+// Exige o direito dedicado de VER o dashboard (ver
+// PluginDashglpiDashboard::$rightname) - sem ele, o link do menu nem
+// aparece (hook.php), mas quem digitar a URL direto precisa ser barrado
+// aqui, antes de qualquer HTML ser enviado.
+Session::checkRight(PluginDashglpiDashboard::$rightname, READ);
+
 global $CFG_GLPI;
 
 // Caminho base do plugin para o JS
@@ -36,11 +42,22 @@ if (empty($userInitials)) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard GLPI Pro</title>
-    <link href="<?php echo $pluginRoot; ?>/vendor/css/bootstrap.min.css" rel="stylesheet">
-    <link href="<?php echo $pluginRoot; ?>/vendor/css/fontawesome.min.css" rel="stylesheet">
+    <?php
+    /*
+     * Bootstrap/FontAwesome/Chart.js vêm de CDN - o README documentava
+     * `public/vendor/` como "servido localmente, sem CDN", mas essa pasta
+     * nunca chegou a existir no repositório (só o HTML já referenciava os
+     * caminhos, sem os arquivos por trás), então a página inteira renderizava
+     * sem grid, sem ícone e sem gráfico nenhum. CDN é a correção pragmática
+     * até alguém vendorizar as bibliotecas de verdade; o README foi
+     * atualizado para refletir isso.
+     */
+    ?>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?php echo $pluginRoot; ?>/css/style.css">
+    <link rel="stylesheet" href="<?php echo $pluginRoot; ?>/public/css/style.css">
     <script>
         // Passa o root do plugin para o JS
         const DASHGLPI_ROOT = '<?php echo $pluginRoot; ?>';
@@ -288,7 +305,6 @@ if (empty($userInitials)) {
                     <div class="page-subtitle">
                         <i class="fas fa-stopwatch"></i>
                         <span>Acompanhamento em tempo real</span>
-                        <span style="margin-left: 12px; padding: 2px 8px; background: var(--warning); color: #000; border-radius: 4px; font-size: 0.7rem; font-weight: 700;">DEMONSTRAÇÃO</span>
                     </div>
                 </div>
             </header>
@@ -370,6 +386,56 @@ if (empty($userInitials)) {
             <header class="page-header">
                 <h1>Todos os Chamados</h1>
             </header>
+
+            <?php
+            /*
+             * Filtro de equipe/técnicos. Os botões "Minha equipe"/"Todos os
+             * técnicos" e a lista de checkboxes do painel manual são
+             * montados via JS (initTeamFilter() em script.js), a partir de
+             * ?action=filter_options - o PHP só desenha o esqueleto e passa
+             * o estado JÁ ativo (lido da querystring) para os data-* abaixo,
+             * pra a primeira renderização do JS já nascer com o filtro
+             * certo marcado, sem esperar um segundo re-render.
+             */
+            $filtroEquipeAtual   = $_GET['equipe'] ?? 'todos';
+            $filtroTecnicosAtual = $_GET['tecnicos'] ?? '';
+            ?>
+            <div
+                id="team-filter-bar"
+                class="glass-card team-filter-bar"
+                data-equipe-ativa="<?php echo htmlspecialchars($filtroEquipeAtual, ENT_QUOTES); ?>"
+                data-tecnicos-ativos="<?php echo htmlspecialchars($filtroTecnicosAtual, ENT_QUOTES); ?>"
+            >
+                <div class="team-filter-buttons">
+                    <button type="button" id="btn-filtro-minha-equipe" class="team-filter-btn" style="display:none;">
+                        <i class="fas fa-user-friends"></i>
+                        <span id="btn-filtro-minha-equipe-label">Minha equipe</span>
+                    </button>
+                    <button type="button" id="btn-filtro-todos" class="team-filter-btn">
+                        <i class="fas fa-users"></i>
+                        Todos os técnicos
+                    </button>
+                    <button type="button" id="btn-filtro-manual" class="team-filter-btn">
+                        <i class="fas fa-sliders-h"></i>
+                        Escolher técnicos...
+                    </button>
+                </div>
+                <div id="team-filter-panel" class="team-filter-panel" hidden>
+                    <div class="team-filter-panel-header">
+                        <span>Selecione um ou mais técnicos</span>
+                        <button type="button" id="btn-filtro-fechar-painel" class="team-filter-panel-close" aria-label="Fechar">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div id="team-filter-checkboxes" class="team-filter-checkboxes">
+                        <div class="text-center p-3"><i class="fas fa-spinner fa-spin"></i></div>
+                    </div>
+                    <div class="team-filter-panel-footer">
+                        <button type="button" id="btn-filtro-aplicar" class="team-filter-apply">Aplicar</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="glass-card table-card">
                 <div class="table-responsive">
                     <table class="custom-table">
@@ -378,6 +444,7 @@ if (empty($userInitials)) {
                                 <th>ID</th>
                                 <th>Título</th>
                                 <th>Status</th>
+                                <th>SLA</th>
                                 <th>Técnico</th>
                                 <th>Data</th>
                             </tr>
@@ -470,7 +537,13 @@ if (empty($userInitials)) {
         </div>
     </div>
 
-    <script src="<?php echo $pluginRoot; ?>/vendor/js/chart.umd.min.js"></script>
-    <script src="<?php echo $pluginRoot; ?>/js/script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script>
+        // Filtro de equipe/técnicos ativo (ver ?equipe=/?tecnicos= na URL) -
+        // lido uma vez aqui para o script.js montar a UI e anexar aos fetch()
+        // sem precisar reler a query string em vários lugares.
+        const DASHGLPI_FILTRO_INICIAL = new URLSearchParams(window.location.search).toString();
+    </script>
+    <script src="<?php echo $pluginRoot; ?>/public/js/script.js"></script>
 </body>
 </html>

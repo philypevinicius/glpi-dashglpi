@@ -20,10 +20,17 @@ Dashboard avançado e independente para visualização de dados do GLPI, com int
   - Abertos vs Solucionados (barra comparativa, últimos 6 meses)
 - **Tabela de Atividade Recente** com os 5 últimos chamados
 
-### Monitor de SLA (Demonstração)
-- Contadores de SLA: Crítico, Atenção, No Prazo
-- Lista de chamados próximos ao vencimento com countdown em tempo real
-- *Nota: seção com dados de demonstração — não conectada ao SLA real do GLPI*
+### Monitor de SLA
+- Percentual do prazo já consumido por chamado, calculado a partir dos campos
+  nativos do GLPI (`date`, `time_to_resolve`, `solvedate` - sem depender de
+  nenhuma extensão de SLA) - ver `PluginDashglpiDashboard::calcularPercentualSla()`
+- Barra de progresso colorida por faixa de percentual: azul (<25%) → verde
+  (25-50%) → amarelo (50-75%) → laranja (75-90%) → vermelho (90-100%) → roxo
+  (>100%, estourado) - ver `PluginDashglpiDashboard::corSla()`
+- Contadores de SLA (Crítico/Atenção/No Prazo) e lista de chamados próximos ao
+  vencimento com countdown em tempo real, ambos a partir dos mesmos dados reais
+- Chamados sem SLA aplicado (`time_to_resolve` vazio) não entram na lista nem
+  contam nos totais - "sem SLA" é diferente de "SLA tranquilo"
 
 ### Ranking de Técnicos (Gamificação)
 - Ranking mensal baseado em chamados resolvidos
@@ -43,6 +50,34 @@ Dashboard avançado e independente para visualização de dados do GLPI, com int
 - **Atualização automática** dos dados a cada 60 segundos
 - **Relógio** em tempo real no header
 - **Painel de Notificações** (demonstração)
+
+### Controle de acesso
+
+O dashboard tem um direito PRÓPRIO, `plugin_dashglpi_dashboard` (READ), separado
+de qualquer direito de editar/pausar chamado - controla só quem PODE VER o
+dashboard. Registrado em todos os perfis com valor 0 (sem acesso) na
+instalação; fica em **Configurar > Perfis > [perfil] > aba "Dashboard Pro"**,
+um único checkbox "Ver o dashboard". Sem o direito, o link do menu nem aparece
+e a URL direta responde 403 - os dois pontos (`hook.php` e
+`front/dashboard.php`) checam o mesmo direito de forma independente.
+
+### Filtro de equipe/técnicos
+
+Acima da tabela "Todos os Chamados": três opções, sempre a mesma primeira que
+vale -
+- **Minha equipe (N)** - só aparece para quem é gestor de algum Grupo do
+  GLPI (`glpi_groups_users.is_manager = 1`); mostra os chamados de todos os
+  membros desse(s) grupo(s)
+- **Todos os técnicos** - remove o filtro
+- **Escolher técnicos...** - painel com um checkbox por técnico (união de
+  "minha equipe" com quem tem chamado aberto atribuído, mesmo fora da
+  equipe), seleção livre, aplicada só ao clicar "Aplicar"
+
+O estado (`?equipe=todos|minha|manual&tecnicos=1,2,3`) fica na URL - dá pra
+favoritar/compartilhar o link já filtrado. Os KPIs, gráficos e o Monitor de
+SLA recalculam de acordo com o filtro ativo, não só a tabela. Filtro manual
+sem nenhum técnico selecionado mostra aviso, não uma tabela vazia sem
+explicação.
 
 ---
 
@@ -79,28 +114,32 @@ Dashboard avançado e independente para visualização de dados do GLPI, com int
 ```
 dashglpi/
 ├── setup.php                  # Registro do plugin, versão, hooks
-├── hook.php                   # Install/uninstall, menu (redefine_menus)
+├── hook.php                   # Install/uninstall (direito), menu (redefine_menus)
 ├── front/
-│   └── dashboard.php          # Página standalone (HTML completo, autenticada)
+│   ├── dashboard.php          # Página standalone (HTML completo, autenticada)
+│   └── profile.form.php       # Grava o direito do dashboard num perfil
 ├── ajax/
-│   └── dashboard.php          # Endpoint AJAX (4 actions, retorna JSON)
+│   └── dashboard.php          # Endpoint AJAX (5 actions, retorna JSON)
 ├── inc/
-│   └── dashboard.class.php    # Backend: queries SQL via $DB->request()
+│   ├── dashboard.class.php    # Backend: queries SQL via $DB->request(), SLA, filtro
+│   └── profile.class.php      # Aba "Dashboard Pro" no item Profile
+├── tests/
+│   └── filtro_logica_test.php # Teste standalone (sem GLPI) da lógica de filtro
 ├── public/
 │   ├── css/
 │   │   └── style.css          # Estilos (glassmorphism, cyberpunk, dark/light)
-│   ├── js/
-│   │   ├── script.js          # Lógica frontend (charts, modals, AJAX)
-│   │   └── menu.js            # Script mínimo: força links em nova aba
-│   └── vendor/
-│       ├── css/
-│       │   ├── bootstrap.min.css
-│       │   └── fontawesome.min.css
-│       ├── js/
-│       │   └── chart.umd.min.js
-│       └── webfonts/          # FontAwesome (woff2, ttf)
+│   └── js/
+│       ├── script.js          # Lógica frontend (charts, modals, filtro, AJAX)
+│       └── menu.js            # Script mínimo: força links em nova aba
 └── README.md
 ```
+
+> Bootstrap 5, FontAwesome 6 e Chart.js vêm de **CDN** (jsDelivr/cdnjs), não de
+> `public/vendor/` local - essa pasta era documentada mas nunca chegou a
+> existir no repositório, o que deixava a página inteira sem grid, sem ícone
+> e sem gráfico algum (nenhum arquivo de biblioteca para carregar). Trocar por
+> CDN foi a correção pragmática; vendorizar de verdade fica como próximo passo
+> se algum dia o ambiente não puder depender de CDN externo.
 
 ---
 
@@ -133,7 +172,7 @@ A autenticação é garantida via `Session::checkLoginUser()` no topo de cada ar
 
 O plugin **não injeta CSS** globalmente no GLPI (evita conflitos visuais). Apenas um JS mínimo (`menu.js`, 10 linhas) é carregado globalmente para forçar o link do menu a abrir em nova aba.
 
-Bibliotecas de terceiros (Bootstrap, FontAwesome, Chart.js) são servidas localmente a partir de `public/vendor/` — sem dependência de CDN.
+Bibliotecas de terceiros (Bootstrap, FontAwesome, Chart.js) vêm de CDN - ver a nota na seção "Estrutura de Arquivos" acima.
 
 ---
 
@@ -141,27 +180,42 @@ Bibliotecas de terceiros (Bootstrap, FontAwesome, Chart.js) são servidas localm
 
 Endpoint: `plugins/dashglpi/ajax/dashboard.php`
 
-Todas as requests requerem sessão GLPI autenticada (cookie de sessão).
+Todas as requests requerem sessão GLPI autenticada (cookie de sessão) **e** o
+direito `plugin_dashglpi_dashboard` (ver "Controle de acesso" acima) - sem
+ele, qualquer action devolve 403, mesmo para Super-Admin.
+
+Filtro de equipe/técnicos, aceito por `dashboard_data` e `tickets_list`:
+- `?equipe=todos` (padrão, se omitido) - sem filtro
+- `?equipe=minha` - só a equipe do usuário logado (grupos em que é gestor)
+- `?equipe=manual&tecnicos=1,2,3` - só os ids informados; `tecnicos=` vazio
+  filtra para ZERO chamados (não "sem filtro")
 
 | Action | Método | Descrição | Resposta |
 |--------|--------|-----------|----------|
-| `dashboard_data` | GET | KPIs + dados dos gráficos | `{cards_top, cards_bottom, charts}` |
+| `dashboard_data` | GET | KPIs + dados dos gráficos (aceita filtro) | `{cards_top, cards_bottom, charts}` |
 | `get_ranking` | GET | Ranking de técnicos do mês | `[{name, avatar, tickets, points, color}]` |
-| `tickets_list` | GET | Lista de chamados ativos (máx. 100) | `[{id, name, status, date, category, user_name}]` |
+| `tickets_list` | GET | Lista de chamados ativos, máx. 100 (aceita filtro) | `[{id, name, status, date, category, user_name, time_to_resolve, solvedate, sla_percentual, sla_cor, tecnicos, tecnico}]` |
 | `assets_list` | GET | Lista de computadores (máx. 100) | `[{id, name, serial, location, model, os_name, cpu, ram_total, disk_total, disk_free}]` |
+| `filter_options` | GET | Dados pro filtro de equipe/técnicos | `{minha_equipe: {disponivel, tecnicos}, todos_tecnicos}` |
+
+`sla_percentual` é `null` (e `sla_cor` é `"none"`) quando o chamado não tem
+`time_to_resolve` - sem SLA aplicado, sem barra pra desenhar. `tecnicos` é a
+lista de nomes atribuídos (pode ter mais de um); `tecnico` é a mesma lista
+já unida em texto, pronta pra exibir.
 
 ### Exemplo de uso
 
 ```javascript
-const response = await fetch('/plugins/dashglpi/ajax/dashboard.php?action=dashboard_data');
+const response = await fetch('/plugins/dashglpi/ajax/dashboard.php?action=dashboard_data&equipe=minha');
 const data = await response.json();
-// data.cards_top.total → total de chamados
+// data.cards_top.total → total de chamados DA EQUIPE do usuário logado
 // data.charts.trend_line → [{dia, total}, ...]
 ```
 
 ### Tratamento de erros
 
 - **400** — Action inválida: `{"error": "Ação inválida."}`
+- **403** — Sem o direito do dashboard: `{"error": "Acesso negado."}`
 - **500** — Erro interno: `{"error": "Erro interno do servidor."}` (detalhes logados no `php-errors.log`)
 - **302** — Sem autenticação: redirect para login
 
@@ -220,12 +274,11 @@ Ativado via classe `light-mode` no `<body>`. As variáveis são sobrescritas par
 
 ## Seções de Demonstração
 
-As seguintes seções usam dados estáticos de exemplo (não conectadas a dados reais do GLPI):
+- **Notificações** — lista fixa de 3 notificações. Marcado com badge "DEMO". Serve como placeholder para uma futura integração com o sistema de notificações do GLPI.
 
-- **Monitor de SLA** — dados fictícios com countdown. Marcado com badge "DEMONSTRAÇÃO".
-- **Notificações** — lista fixa de 3 notificações. Marcado com badge "DEMO".
-
-Estas seções servem como placeholder para futuras integrações com SLA real e sistema de notificações do GLPI.
+O Monitor de SLA usava dados 100% fictícios (badge "DEMONSTRAÇÃO" no HTML) -
+não usa mais: o badge foi removido e os dados vêm de `tickets_list` (chamados
+reais), ver "Monitor de SLA" mais acima.
 
 ---
 

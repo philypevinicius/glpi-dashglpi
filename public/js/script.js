@@ -12,12 +12,156 @@ let tvMode = false;
 let notificationCount = 3;
 let assetsDataGlobal = []; // Variável global essencial para o Modal Cyberpunk
 
+// ==================== FILTRO DE EQUIPE/TÉCNICOS ====================
+// Cores da barra de SLA por faixa de percentual consumido - ver
+// PluginDashglpiDashboard::corSla() no backend (mesma escala, mesmos
+// nomes de cor, pra JS e PHP nunca discordarem sobre o que cada uma
+// significa).
+const SLA_CORES = {
+    blue: '#3b82f6',
+    green: '#22c55e',
+    yellow: '#eab308',
+    orange: '#f97316',
+    red: '#ef4444',
+    purple: '#a855f7',
+    none: '#64748b',
+};
+
+// Estado do filtro, lido da URL ao carregar - ver initTeamFilter().
+let filtroEquipe = 'todos';       // 'todos' | 'minha' | 'manual'
+let filtroTecnicos = [];          // ids selecionados quando filtroEquipe === 'manual'
+let filtroTecnicosDisponiveis = []; // união (equipe + com chamado aberto), pro painel manual
+
+/** Query string do filtro ativo, pronta para colar num fetch(). */
+function filtroQueryString() {
+    const params = new URLSearchParams();
+    params.set('equipe', filtroEquipe);
+    if (filtroEquipe === 'manual') {
+        params.set('tecnicos', filtroTecnicos.join(','));
+    }
+    return params.toString();
+}
+
+/** Sincroniza a URL visível (bookmarkável/compartilhável) com o filtro ativo. */
+function filtroAtualizarURL() {
+    const params = new URLSearchParams(window.location.search);
+    params.set('equipe', filtroEquipe);
+    if (filtroEquipe === 'manual') {
+        params.set('tecnicos', filtroTecnicos.join(','));
+    } else {
+        params.delete('tecnicos');
+    }
+    const nova = window.location.pathname + '?' + params.toString();
+    window.history.replaceState(null, '', nova);
+}
+
+/**
+ * Monta a barra de filtro "Minha equipe" / "Todos os técnicos" / "Escolher
+ * técnicos...". O painel manual (com um checkbox por técnico) começa
+ * escondido (atributo `hidden`) e abre/fecha só trocando esse atributo via
+ * JS - sem framework, como pedido.
+ *
+ * Estado inicial vem de dois lugares: os data-* do #team-filter-bar
+ * (renderizados pelo PHP a partir da querystring, pra já nascer certo sem
+ * esperar o fetch) e, em seguida, ?action=filter_options (pra saber se
+ * "Minha equipe" deve aparecer e montar a lista de checkboxes do painel).
+ */
+async function initTeamFilter() {
+    const barra = document.getElementById('team-filter-bar');
+    if (!barra) return; // esta view não tem a barra (não deveria acontecer, mas não quebra o resto)
+
+    filtroEquipe = barra.dataset.equipeAtiva || 'todos';
+    filtroTecnicos = (barra.dataset.tecnicosAtivos || '')
+        .split(',')
+        .map(v => parseInt(v, 10))
+        .filter(v => !isNaN(v) && v > 0);
+
+    const btnMinhaEquipe = document.getElementById('btn-filtro-minha-equipe');
+    const btnMinhaEquipeLabel = document.getElementById('btn-filtro-minha-equipe-label');
+    const btnTodos = document.getElementById('btn-filtro-todos');
+    const btnManual = document.getElementById('btn-filtro-manual');
+    const btnFechar = document.getElementById('btn-filtro-fechar-painel');
+    const btnAplicar = document.getElementById('btn-filtro-aplicar');
+    const painel = document.getElementById('team-filter-panel');
+    const checkboxesContainer = document.getElementById('team-filter-checkboxes');
+
+    function marcarBotaoAtivo() {
+        [btnMinhaEquipe, btnTodos, btnManual].forEach(b => b && b.classList.remove('active'));
+        if (filtroEquipe === 'minha' && btnMinhaEquipe) btnMinhaEquipe.classList.add('active');
+        if (filtroEquipe === 'todos' && btnTodos) btnTodos.classList.add('active');
+        if (filtroEquipe === 'manual' && btnManual) btnManual.classList.add('active');
+    }
+
+    function aplicarFiltro(novoEquipe, novosTecnicos) {
+        filtroEquipe = novoEquipe;
+        filtroTecnicos = novosTecnicos || [];
+        filtroAtualizarURL();
+        marcarBotaoAtivo();
+        painel.hidden = true;
+        updateData(); // recarrega KPIs + gráficos + tabela de chamados + Monitor de SLA, todos já com o filtro novo
+    }
+
+    try {
+        const resp = await fetch(PLUGIN_ROOT + '/ajax/dashboard.php?action=filter_options');
+        const opcoes = await resp.json();
+
+        if (opcoes.minha_equipe && opcoes.minha_equipe.disponivel && btnMinhaEquipe) {
+            const total = (opcoes.minha_equipe.tecnicos || []).length;
+            btnMinhaEquipeLabel.textContent = `Minha equipe (${total})`;
+            btnMinhaEquipe.style.display = '';
+        }
+
+        const opcoesTecnicos = opcoes.todos_tecnicos || [];
+        filtroTecnicosDisponiveis = opcoesTecnicos;
+
+        if (opcoesTecnicos.length === 0) {
+            checkboxesContainer.innerHTML = '<p style="padding: 8px; color: var(--text-muted);">Nenhum técnico disponível.</p>';
+        } else {
+            checkboxesContainer.innerHTML = opcoesTecnicos.map(t => `
+                <label class="team-filter-checkbox-item">
+                    <input type="checkbox" value="${t.id}" ${filtroTecnicos.includes(t.id) ? 'checked' : ''}>
+                    <span>${escHtml(t.nome)}</span>
+                </label>
+            `).join('');
+        }
+    } catch (error) {
+        console.error('Error loading filter options:', error);
+        checkboxesContainer.innerHTML = '<p style="padding: 8px; color: var(--danger);">Não foi possível carregar os técnicos.</p>';
+    }
+
+    marcarBotaoAtivo();
+
+    if (btnMinhaEquipe) {
+        btnMinhaEquipe.addEventListener('click', () => aplicarFiltro('minha', []));
+    }
+    if (btnTodos) {
+        btnTodos.addEventListener('click', () => aplicarFiltro('todos', []));
+    }
+    if (btnManual) {
+        btnManual.addEventListener('click', () => {
+            painel.hidden = !painel.hidden;
+        });
+    }
+    if (btnFechar) {
+        btnFechar.addEventListener('click', () => {
+            painel.hidden = true;
+        });
+    }
+    if (btnAplicar) {
+        btnAplicar.addEventListener('click', () => {
+            const marcados = Array.from(checkboxesContainer.querySelectorAll('input[type="checkbox"]:checked'))
+                .map(cb => parseInt(cb.value, 10));
+            aplicarFiltro('manual', marcados);
+        });
+    }
+}
+
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     initCharts();
     initNotifications();
-    initSLAMonitor();
+    initTeamFilter();
     updateData();
 
     // Carrega os ativos com o novo layout
@@ -156,7 +300,7 @@ function stopTVRotation() {
 // ==================== DATA UPDATE ====================
 async function updateData() {
     try {
-        const response = await fetch(PLUGIN_ROOT + '/ajax/dashboard.php?action=dashboard_data');
+        const response = await fetch(PLUGIN_ROOT + '/ajax/dashboard.php?action=dashboard_data&' + filtroQueryString());
         const data = await response.json();
 
         setVal('top-total', data.cards_top.total);
@@ -380,8 +524,20 @@ function initCharts() {
 // ==================== LOAD TICKET LISTS ====================
 async function loadTicketLists() {
     try {
-        const response = await fetch(PLUGIN_ROOT + '/ajax/dashboard.php?action=tickets_list');
+        const response = await fetch(PLUGIN_ROOT + '/ajax/dashboard.php?action=tickets_list&' + filtroQueryString());
         const tickets = await response.json();
+
+        // Monitor de SLA (seção separada) usa a MESMA lista - sem fetch
+        // duplicado.
+        updateSLAData(tickets);
+
+        // Filtro manual com zero técnicos escolhidos é um estado diferente
+        // de "não há chamados": precisa dizer isso, não mostrar uma tabela
+        // vazia sem explicação.
+        const semTecnicoSelecionado = filtroEquipe === 'manual' && filtroTecnicos.length === 0;
+        const mensagemVazia = semTecnicoSelecionado
+            ? 'Nenhum técnico selecionado - escolha ao menos um em "Escolher técnicos..." acima.'
+            : 'Nenhum chamado encontrado' + (filtroEquipe !== 'todos' ? ' para este filtro de equipe.' : '.');
 
         const recentBody = document.getElementById('recent-tickets-body');
         if (tickets.length > 0) {
@@ -412,7 +568,7 @@ async function loadTicketLists() {
                         </tr>
                     `).join('');
         } else {
-            recentBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">Nenhum chamado encontrado</td></tr>';
+            recentBody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">${escHtml(mensagemVazia)}</td></tr>`;
         }
 
         const fullBody = document.getElementById('tickets-full-body');
@@ -435,16 +591,36 @@ async function loadTicketLists() {
                                     ${statusMap[ticket.status] || 'Outro'}
                                 </span>
                             </td>
-                            <td>${escHtml(ticket.user_name || '-')}</td>
+                            <td>${renderSlaBadge(ticket)}</td>
+                            <td>${escHtml(ticket.tecnico || 'Não atribuído')}</td>
                             <td>${escHtml(ticket.date)}</td>
                         </tr>
                     `).join('');
         } else {
-            fullBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">Nenhum chamado encontrado</td></tr>';
+            fullBody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">${escHtml(mensagemVazia)}</td></tr>`;
         }
     } catch (error) {
         console.error('Error loading tickets:', error);
     }
+}
+
+/** Barra de SLA colorida (azul→roxo) + percentual, pra célula "SLA" da tabela de chamados. */
+function renderSlaBadge(ticket) {
+    if (!ticket.sla_cor || ticket.sla_cor === 'none' || ticket.sla_percentual === null || ticket.sla_percentual === undefined) {
+        return '<span style="color: var(--text-muted); font-size: 0.8rem;">Sem SLA</span>';
+    }
+
+    const cor = SLA_CORES[ticket.sla_cor] || SLA_CORES.none;
+    const largura = Math.min(100, Math.max(4, ticket.sla_percentual));
+
+    return `
+        <div style="display:flex; align-items:center; gap:8px; min-width:110px;">
+            <div style="flex:1; height:6px; border-radius:4px; background: rgba(255,255,255,0.08); overflow:hidden;">
+                <div style="width:${largura}%; height:100%; background:${cor};"></div>
+            </div>
+            <span style="font-size:0.75rem; color:${cor}; font-weight:600; white-space:nowrap;">${Math.round(ticket.sla_percentual)}%</span>
+        </div>
+    `;
 }
 
 // ==================== CYBERPUNK ASSETS & MODAL ====================
@@ -626,27 +802,52 @@ document.addEventListener('click', (e) => {
 });
 
 // ==================== SLA MONITOR ====================
+// Dados reais, a partir de tickets_list (chamado de loadTicketLists() com o
+// resultado do fetch, sem refazer a chamada) - antes desta correção era uma
+// lista 100% inventada (chamados "#2234" etc que não existem), sem relação
+// nenhuma com o prazo real do GLPI. Ver PluginDashglpiDashboard::
+// calcularPercentualSla()/corSla() no backend.
 function initSLAMonitor() {
-    updateSLAData();
     setInterval(updateSLACountdowns, 1000);
 }
 
-function updateSLAData() {
-    const slaItems = [
-        { id: 1, title: 'Problema de rede - Setor Financeiro', ticket: '#2234', deadline: new Date(Date.now() + 30 * 60000), status: 'critical' },
-        { id: 2, title: 'Instalação Office 365', ticket: '#2231', deadline: new Date(Date.now() + 120 * 60000), status: 'warning' },
-        { id: 3, title: 'Manutenção preventiva', ticket: '#2228', deadline: new Date(Date.now() + 480 * 60000), status: 'ok' },
-        { id: 4, title: 'Impressora offline', ticket: '#2225', deadline: new Date(Date.now() + 15 * 60000), status: 'critical' },
-        { id: 5, title: 'Novo usuário - Onboarding', ticket: '#2220', deadline: new Date(Date.now() + 300 * 60000), status: 'ok' }
-    ];
+const SLA_COR_PARA_STATUS = {
+    purple: 'critical',
+    red: 'critical',
+    orange: 'warning',
+    yellow: 'warning',
+    green: 'ok',
+    blue: 'ok',
+};
 
-    renderSLAList(slaItems);
-    updateSLASummary(slaItems);
+function updateSLAData(tickets) {
+    const comSla = (tickets || [])
+        .filter(t => t.sla_cor && t.sla_cor !== 'none' && t.time_to_resolve)
+        .sort((a, b) => (b.sla_percentual ?? 0) - (a.sla_percentual ?? 0))
+        .slice(0, 10)
+        .map(t => ({
+            id: t.id,
+            title: t.name,
+            ticket: '#' + t.id,
+            // "deadline" mantém o nome esperado por renderSLAList()/
+            // updateSLACountdowns() (herdados da versão de demonstração) -
+            // só o VALOR passou a ser o prazo real (time_to_resolve).
+            deadline: new Date(t.time_to_resolve.replace(' ', 'T')),
+            status: SLA_COR_PARA_STATUS[t.sla_cor] || 'ok',
+        }));
+
+    renderSLAList(comSla);
+    updateSLASummary(comSla);
 }
 
 function renderSLAList(items) {
     const container = document.getElementById('slaList');
     if (!container) return;
+
+    if (items.length === 0) {
+        container.innerHTML = '<p style="text-align: center; padding: 24px; color: var(--text-muted);">Nenhum chamado com SLA aplicado no momento.</p>';
+        return;
+    }
 
     container.innerHTML = items.map(item => `
                 <div class="sla-item ${item.status}">
